@@ -1,0 +1,11 @@
+pool first 1000
+alloc A 200
+alloc B 300
+alloc C 100
+free B
+alloc D 150
+alloc E 100
+alloc F 200
+free D
+alloc G 100
+alloc H 100
