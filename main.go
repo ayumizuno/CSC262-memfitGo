@@ -50,6 +50,9 @@ func (sim Simulation) printLists() {
 	}
 	fmt.Println("Used List")
 	//sort used list by offset
+	sort.Slice(sim.usedList, func(i, j int) bool {
+		return sim.usedList[i].offset < sim.usedList[j].offset
+	})
 	//loop through and print each block
 	for _, block := range sim.usedList {
 		fmt.Println(
@@ -59,7 +62,7 @@ func (sim Simulation) printLists() {
 	}
 }
 
-func (sim Simulation) getStats() (float32, float32) {
+func (sim *Simulation) getStats() (float64, float64) {
 	/*
 	Returns pct of free and used space
 	in pool
@@ -74,14 +77,15 @@ func (sim Simulation) getStats() (float32, float32) {
 	for _, block := range sim.usedList {
 		used += block.size
 	}
-	pctFree := float32((free/sim.size) * 100)
-	pctUsed := float32((used/sim.size) * 100)
+	pctFree := (float64(free)/float64(sim.size)) * 100
+	pctUsed := (float64(used)/float64(sim.size)) * 100
 	return pctFree, pctUsed
 }
 
-func (sim Simulation) alloc(name string, size int) {
+func (sim *Simulation) alloc(name string, size int) {
 	/* Splits an available block based on input size */
-	var block *Block
+	//var block *Block
+	block := &sim.freeList[0]
 	if sim.algorithm == "first" {
 		block = sim.allocFirst(size)
 	} else if sim.algorithm == "best" {
@@ -93,35 +97,33 @@ func (sim Simulation) alloc(name string, size int) {
 	} else if sim.algorithm == "random" {
 		block = sim.allocRandom(size)
 	} else {
-		fmt.Println("raise some error")
+		fmt.Println("wobblywi raise some error")
 	}
-	if block != nil {
+	if block.size != 0 {
 		sim.blockSplit(block, name, size)
 	}
 }
 
-func (sim Simulation) find(size int) *Block {
+func (sim *Simulation) find(size int) *Block {
 	/*
 	Return a block in the free list that is
 	equal to or greater than the specified size.
 	If no such block, return nil block
 	 */
-	var nilBlock Block
-	for _, block := range sim.freeList {
-		if block.size >= size {
-			return &block
+	for i, _ := range sim.freeList {
+		if sim.freeList[i].size >= size {
+			return &sim.freeList[i]
 		}
 	}
-	return &nilBlock
+	return nil
 }
 
-func (sim Simulation) findWithIndex(size int, start int, stop int) *
-	Block {
+func (sim Simulation) findWithIndex(size int, start int, stop int) *Block {
 	/*
 	Return next available block in free list in
 	range(start, stop). If no such block, return None
 	 */
-	var nilBlock Block
+
 	for _, block := range sim.freeList {
 		if block.offset >= start && block.offset <= stop {
 			if block.size >= size {
@@ -130,17 +132,18 @@ func (sim Simulation) findWithIndex(size int, start int, stop int) *
 			}
 		}
 	}
-	return &nilBlock
+	return nil
 }
 
-func (sim Simulation) allocFirst(size int) *Block {
+func (sim *Simulation) allocFirst(size int) *Block {
 	/*
 	Returns next available space based on first-fit alg
 	 */
 	sort.Slice(sim.freeList, func(i, j int) bool {
 		return sim.freeList[i].offset < sim.freeList[j].offset
 	})
-	return sim.find(size)
+	blk := sim.find(size)
+	return blk
 }
 
 func (sim Simulation) allocBest(size int) *Block {
@@ -150,7 +153,8 @@ func (sim Simulation) allocBest(size int) *Block {
 	sort.Slice(sim.freeList, func(i, j int) bool {
 		return sim.freeList[i].size < sim.freeList[j].size
 	})
-	return sim.find(size)
+	blk := sim.find(size)
+	return blk
 }
 
 func (sim Simulation) allocWorst(size int) *Block {
@@ -160,7 +164,8 @@ func (sim Simulation) allocWorst(size int) *Block {
 	sort.Slice(sim.freeList, func(i, j int) bool {
 		return sim.freeList[i].size > sim.freeList[j].size
 	})
-	return sim.find(size)
+	blk := sim.find(size)
+	return blk
 }
 
 func (sim Simulation) allocNext(size int) *Block {
@@ -171,7 +176,7 @@ func (sim Simulation) allocNext(size int) *Block {
 		return sim.freeList[i].offset < sim.freeList[j].offset
 	})
 	block := sim.findWithIndex(size, sim.lastOffset, sim.size)
-	if block != nil {
+	if block.size != 0 {
 		return block
 	} else{
 		block = sim.findWithIndex(size, 0, sim.lastOffset)
@@ -187,26 +192,77 @@ func (sim Simulation) allocRandom(size int) *Block {
 	rand.Shuffle(len(sim.freeList), func(i, j int){
 		sim.freeList[i], sim.freeList[j] = sim.freeList[j], sim.freeList[i]
 	})
-	return sim.find(size)
+	blk := sim.find(size)
+	return blk
 }
 
-func (sim Simulation) free(){
+func (sim *Simulation) free(name string){
 	/*
 		Free block in used list and add it back to free list
 	*/
+	for i, _ := range sim.usedList {
+		if sim.usedList[i].name == name {
+			sim.freeList = append(sim.freeList, sim.usedList[i])
+			sim.usedList = append(sim.usedList[:i], sim.usedList[i+1:]...) //'...' turns slice into arg
+			return
+		}
+	}
 }
 
-func (sim Simulation) compactFree(){
+func (sim *Simulation) compactFree(){
 	/*
 		Go through free list and compact adjacent blocks
 	*/
+	// sort free list by offset
+	sort.Slice(sim.freeList, func(i, j int) bool {
+		return sim.freeList[i].offset < sim.freeList[j].offset
+	})
+	copyList := make([]Block, 1)
+	copyBlock := Block{name:"free", size:0, offset:0}
+
+	for i, _ := range sim.freeList {
+		if copyBlock.isAdjacent(sim.freeList[i]){
+			copyBlock.size += sim.freeList[i].size
+		} else {
+			if copyBlock.size > 0 {
+				copyList = append(copyList, copyBlock)
+			}
+			copyBlock = sim.freeList[i]
+		}
+	}
+	if copyBlock.size > 0 {
+		copyList = append(copyList, copyBlock)
+	}
+	sim.freeList = copyList
 }
 
-func (sim Simulation) blockSplit(block *Block, newName string, size int){
+func (sim *Simulation) blockSplit(block *Block, newName string, size int){
 	/*
 		Construct one or two new blocks given a block and
 		a specific size to allocate
 	*/
+	if size > block.size {
+		fmt.Println("raise some error")
+	} else if size == block.size {
+		block.name = newName
+		sim.usedList = append(sim.usedList, *block)
+		blkIndex := 0
+		//find block in free list and delete
+		for i, _ := range sim.freeList {
+			blkIndex = i
+			if sim.freeList[i] == *block{
+				break
+			}
+		}
+		sim.freeList = append(sim.freeList[:blkIndex], sim.freeList[blkIndex+1:]...)
+	} else {
+		newBlock := Block{name:newName, size:size, offset:block.offset}
+		block.offset += size
+		block.size -= size
+		sim.usedList = append(sim.usedList, newBlock)
+		fmt.Println(*block == sim.freeList[0], *block, sim.freeList, sim.usedList)
+
+	}
 }
 
 func start(line string) Simulation {
@@ -220,16 +276,20 @@ func start(line string) Simulation {
 	return sim
 }
 
-func printStats(pctFree float32, pctUsed float32, failed int) {
+func printStats(pctFree float64, pctUsed float64, failed int) {
 	/*
 		Prints stats of simulation
 	 */
+	fmt.Println("Percent of used memory:", pctUsed, "%")
+	fmt.Println("Percent of free memory:", pctFree, "%")
+	fmt.Println("Number of failed allocations:", failed)
 }
+
 func main() {
 	fmt.Println("hello")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
-	//sim := start(scanner.Text()) //simulation object to run alg on
+	sim := start(scanner.Text()) //simulation object to run alg on
 	for scanner.Scan() {
 		line := scanner.Text()
 		fmt.Println(line)
@@ -237,16 +297,21 @@ func main() {
 			fmt.Println(line)
 			line := strings.Fields(line)
 			if line[0] == "alloc" {
-				//call alloc
+				size, _ := strconv.Atoi(line[2])
+				sim.alloc(line[1], size)
 			} else if line[0] == "free" {
-				//call free
-				//compact free list
+				sim.free(line[1])
+				sim.compactFree()
+
 			} else {
 				//raise error
+				fmt.Println("raise some error")
 			}
-			//print both free list and used list
+			sim.printLists()
 		}
 	}
 	//print stats
+	pctFree, pctUsed := sim.getStats()
+	printStats(pctFree, pctUsed, sim.failed)
 }
 
