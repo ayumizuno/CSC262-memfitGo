@@ -60,6 +60,7 @@ func (sim Simulation) printLists() {
 			"\t size:", block.size,
 			"\t name:", block.name)
 	}
+	fmt.Println("\n")
 }
 
 func (sim *Simulation) getStats() (float64, float64) {
@@ -97,10 +98,15 @@ func (sim *Simulation) alloc(name string, size int) {
 	} else if sim.algorithm == "random" {
 		block = sim.allocRandom(size)
 	} else {
-		fmt.Println("wobblywi raise some error")
+		err := "\nInvalid algorithm specified"
+		fmt.Println(err)
+		os.Exit(1)
 	}
-	if block.size != 0 {
+	if block != nil {
 		sim.blockSplit(block, name, size)
+	} else {
+		sim.failed += 1
+		fmt.Println("Failed allocation of ", name)
 	}
 }
 
@@ -118,17 +124,17 @@ func (sim *Simulation) find(size int) *Block {
 	return nil
 }
 
-func (sim Simulation) findWithIndex(size int, start int, stop int) *Block {
+func (sim *Simulation) findWithIndex(size int, start int, stop int) *Block {
 	/*
 	Return next available block in free list in
 	range(start, stop). If no such block, return None
 	 */
 
-	for _, block := range sim.freeList {
-		if block.offset >= start && block.offset <= stop {
-			if block.size >= size {
-				sim.lastOffset = block.offset
-				return &block
+	for i, _ := range sim.freeList {
+		if sim.freeList[i].offset >= start && sim.freeList[i].offset <= stop {
+			if sim.freeList[i].size >= size {
+				sim.lastOffset = sim.freeList[i].offset
+				return &sim.freeList[i]
 			}
 		}
 	}
@@ -146,7 +152,7 @@ func (sim *Simulation) allocFirst(size int) *Block {
 	return blk
 }
 
-func (sim Simulation) allocBest(size int) *Block {
+func (sim *Simulation) allocBest(size int) *Block {
 	/*
 		Returns next available space based on best-fit alg
 	*/
@@ -157,7 +163,7 @@ func (sim Simulation) allocBest(size int) *Block {
 	return blk
 }
 
-func (sim Simulation) allocWorst(size int) *Block {
+func (sim *Simulation) allocWorst(size int) *Block {
 	/*
 		Returns next available space based on worst-fit alg
 	*/
@@ -168,15 +174,16 @@ func (sim Simulation) allocWorst(size int) *Block {
 	return blk
 }
 
-func (sim Simulation) allocNext(size int) *Block {
+func (sim *Simulation) allocNext(size int) *Block {
 	/*
 		Returns next available space based on next-fit alg
 	*/
+	fmt.Println(sim.lastOffset)
 	sort.Slice(sim.freeList, func(i, j int) bool {
 		return sim.freeList[i].offset < sim.freeList[j].offset
 	})
 	block := sim.findWithIndex(size, sim.lastOffset, sim.size)
-	if block.size != 0 {
+	if block !=nil {
 		return block
 	} else{
 		block = sim.findWithIndex(size, 0, sim.lastOffset)
@@ -184,7 +191,7 @@ func (sim Simulation) allocNext(size int) *Block {
 	}
 }
 
-func (sim Simulation) allocRandom(size int) *Block {
+func (sim *Simulation) allocRandom(size int) *Block {
 	/*
 		Returns random block from free list
 	*/
@@ -217,7 +224,7 @@ func (sim *Simulation) compactFree(){
 	sort.Slice(sim.freeList, func(i, j int) bool {
 		return sim.freeList[i].offset < sim.freeList[j].offset
 	})
-	copyList := make([]Block, 1)
+	copyList := make([]Block, 0)
 	copyBlock := Block{name:"free", size:0, offset:0}
 
 	for i, _ := range sim.freeList {
@@ -242,7 +249,9 @@ func (sim *Simulation) blockSplit(block *Block, newName string, size int){
 		a specific size to allocate
 	*/
 	if size > block.size {
-		fmt.Println("raise some error")
+		err := "\nShouldn't be splitting this block"
+		fmt.Println(err)
+		os.Exit(1)
 	} else if size == block.size {
 		block.name = newName
 		sim.usedList = append(sim.usedList, *block)
@@ -260,8 +269,6 @@ func (sim *Simulation) blockSplit(block *Block, newName string, size int){
 		block.offset += size
 		block.size -= size
 		sim.usedList = append(sim.usedList, newBlock)
-		fmt.Println(*block == sim.freeList[0], *block, sim.freeList, sim.usedList)
-
 	}
 }
 
@@ -286,7 +293,6 @@ func printStats(pctFree float64, pctUsed float64, failed int) {
 }
 
 func main() {
-	fmt.Println("hello")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
 	sim := start(scanner.Text()) //simulation object to run alg on
@@ -294,7 +300,6 @@ func main() {
 		line := scanner.Text()
 		fmt.Println(line)
 		if len(line) > 0 {
-			fmt.Println(line)
 			line := strings.Fields(line)
 			if line[0] == "alloc" {
 				size, _ := strconv.Atoi(line[2])
@@ -304,8 +309,9 @@ func main() {
 				sim.compactFree()
 
 			} else {
-				//raise error
-				fmt.Println("raise some error")
+				err := "\nInvalid line in input file"
+				fmt.Println(err)
+				os.Exit(1)
 			}
 			sim.printLists()
 		}
