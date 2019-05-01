@@ -12,13 +12,17 @@ import (
 )
 
 type Block struct {
+	/* one unit of memory allocation */
 	name string
 	size int
 	offset int
 }
 
 func (block Block) isAdjacent(currBlock Block) bool {
-	/* Returns true if block is next to another block */
+	/*
+	Returns true if block passed in is next to
+	another block
+	*/
 	if currBlock.offset == block.offset + block.size ||
 			block.offset == currBlock.offset + block.size {
 		return true
@@ -27,6 +31,7 @@ func (block Block) isAdjacent(currBlock Block) bool {
 }
 
 type Simulation struct {
+	/* Properties of entire simulation */
 	algorithm string
 	size int
 	freeList []Block
@@ -64,17 +69,12 @@ func (sim Simulation) printLists() {
 }
 
 func (sim *Simulation) getStats() (float64, float64) {
-	/*
-	Returns pct of free and used space
-	in pool
-	 */
-	free := 0
-	used := 0
-	// add block size to free for all blocks in free list
+	/* Returns pct of free and used space */
+	free := 0 //keeps track of total block size in free list
+	used := 0 //keeps track of total block size in used list
 	for _, block := range sim.freeList {
 		free += block.size
 	}
-	//add block size to used for all blocks in used list
 	for _, block := range sim.usedList {
 		used += block.size
 	}
@@ -85,7 +85,6 @@ func (sim *Simulation) getStats() (float64, float64) {
 
 func (sim *Simulation) alloc(name string, size int) {
 	/* Splits an available block based on input size */
-	//var block *Block
 	block := &sim.freeList[0]
 	if sim.algorithm == "first" {
 		block = sim.allocFirst(size)
@@ -129,7 +128,6 @@ func (sim *Simulation) findWithIndex(size int, start int, stop int) *Block {
 	Return next available block in free list in
 	range(start, stop). If no such block, return None
 	 */
-
 	for i, _ := range sim.freeList {
 		if sim.freeList[i].offset >= start && sim.freeList[i].offset <= stop {
 			if sim.freeList[i].size >= size {
@@ -320,4 +318,3 @@ func main() {
 	pctFree, pctUsed := sim.getStats()
 	printStats(pctFree, pctUsed, sim.failed)
 }
-
